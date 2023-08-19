@@ -145,6 +145,7 @@ module Asciidoctor
         @label = :primary
         @initial_instance_variables = [:@initial_instance_variables] + instance_variables
         @invalid_header_pages = []
+        @doc = doc # XXX CHARLOTTE
       end
 
       def convert node, name = nil, _opts = {}
@@ -4398,7 +4399,31 @@ module Asciidoctor
         @invalid_header_pages << page_number
       end
 
-      alias start_new_part start_new_chapter
+      # MAGENTA STRIPE MEDIA addition: Background image for part-pages. Mostly
+      # copied from #start_title_page.
+      def start_new_part part
+        start_new_page unless at_page_top?
+        # TODO: must call update_colors before advancing to next page if start_new_page is called in ink_part_title
+        if @ppbook && verso_page? && !(part.option? 'nonfacing')
+          start_new_page
+          @invalid_header_pages << (page_number - 1)
+        end
+        @invalid_header_pages << page_number
+
+        if (bg_image = resolve_background_image @doc, @theme, 'part-page-background-image')
+          recycle = @ppbook ? recto_page? : true
+          side = page_side (recycle ? nil : page_number + 1), @folio_placement[:inverted]
+          prev_bg_image = get_page_bg_image @doc, @theme, (layout = page.layout), side
+          @page_bg_image[layout][side] = bg_image[0] && bg_image
+        end
+        if (bg_color = resolve_theme_color :part_page_background_color)
+          prev_bg_color = @page_bg_color
+          @page_bg_color = bg_color
+        end
+        recycle ? float { init_page @doc, self } : start_new_page
+        @page_bg_image[layout][side] = prev_bg_image if bg_image
+        @page_bg_color = prev_bg_color if bg_color
+      end
 
       # Returns a Boolean indicating whether the title page was created
       def start_title_page doc
