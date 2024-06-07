@@ -144,6 +144,7 @@ module Asciidoctor
         end
         @label = :primary
         @initial_instance_variables = [:@initial_instance_variables] + instance_variables
+        @invalid_header_pages = []
       end
 
       def convert node, name = nil, _opts = {}
@@ -3697,12 +3698,15 @@ module Asciidoctor
                   else
                     theme_font %(#{periphery}_#{side}_#{position}) do
                       # NOTE: minor optimization
-                      if content == '{page-number}'
+                      if @invalid_header_pages.include?(page_number)
+                        content = ""
+                      elsif content == '{page-number}'
                         content = pagenums_enabled ? pgnum_label : nil
                       else
                         content = apply_subs_discretely doc, content, drop_lines_with_unresolved_attributes: true, imagesdir: @themesdir
                         content = transform_text content, @text_transform if @text_transform
                       end
+
                       formatted_text_box (parse_text content, inline_format: [normalize: true]),
                         at: [left, bounds.top - trim_styles[:padding][side][0] - trim_styles[:content_offset] + ((Array trim_styles[:valign])[0] == :center ? font.descender * 0.5 : 0)],
                         color: @font_color,
@@ -4409,9 +4413,18 @@ module Asciidoctor
         end
       end
 
+      # We also take this opportunity to record pages for which we do NOT
+      # want to write running-content: new parts or chapters, and also any
+      # blank verso pages that might have been caused by a new part or
+      # chapter.
       def start_new_chapter chapter
         start_new_page unless at_page_top?
-        start_new_page if @ppbook && verso_page? && !(chapter.option? 'nonfacing')
+        # TODO: must call update_colors before advancing to next page if start_new_page is called in ink_chapter_title
+        if @ppbook && verso_page? && !(chapter.option? 'nonfacing')
+          start_new_page
+          @invalid_header_pages << (page_number - 1)
+        end
+        @invalid_header_pages << page_number
       end
 
       alias start_new_part start_new_chapter
